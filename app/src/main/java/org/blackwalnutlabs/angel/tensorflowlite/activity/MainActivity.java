@@ -83,9 +83,11 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
      * Debug
      */
     private TextView displayResult;
+    private RelativeLayout maskLayout;
 
     private void initDebug() {
         displayResult = findViewById(R.id.displayResult);
+        maskLayout = findViewById(R.id.maskLayout);
     }
 
     /*
@@ -147,13 +149,35 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
     @Override
     public void onCameraViewStarted(int width, int height) {
-        tmpMat = new Mat();
-        emptyMat = new Mat();
+          tmpMat = new Mat();
+        zeroMat = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
+        currentMat = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
+        kernel = Imgproc.getStructuringElement(MORPH_RECT, new Size(2, 2));
 
-        mask = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
-        Core.rectangle(mask, new Point(MAXWIDTH / 2 - MAXHEIGHT / 2, 0), new Point(MAXWIDTH / 2 + MAXHEIGHT / 2, MAXHEIGHT), new Scalar(255), -1);
-
+      
         initModel();
+
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int trueH = dm.heightPixels;
+
+        maskLayout.setMinimumHeight(trueH);
+        maskLayout.setMinimumWidth(trueH);
+        
+        maskLayout.setOnTouchListener((v, event) -> {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_UP:
+                break;
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_MOVE:
+                float tX = event.getX() / trueH * 640;
+                float tY = event.getY() / trueH * 480;
+                if (tX < MAXWIDTH / 2 - MAXHEIGHT / 2 || tX > MAXWIDTH / 2 + MAXHEIGHT / 2) {
+                    return true;
+                }
+                Core.line(currentMat, new Point(tX, tY), new Point(tX, tY), new Scalar(255), 12);
+                break;
+        }
+        return true;
     }
 
     private void initModel() {
