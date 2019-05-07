@@ -83,9 +83,11 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
      * Debug
      */
     private TextView displayResult;
+    private RelativeLayout maskLayout;
 
     private void initDebug() {
         displayResult = findViewById(R.id.displayResult);
+        maskLayout = findViewById(R.id.maskLayout);
     }
 
     /*
@@ -124,9 +126,10 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
      * */
 
     private JavaCameraView openCvCameraView;
-    private Mat mask;
     private Mat tmpMat;
-    private Mat emptyMat;
+    private Mat zeroMat;
+    private Mat currentMat;
+    private Mat kernel;
 
     static {
         if (!OpenCVLoader.initDebug()) {
@@ -148,12 +151,60 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     @Override
     public void onCameraViewStarted(int width, int height) {
         tmpMat = new Mat();
-        emptyMat = new Mat();
+        zeroMat = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
+        currentMat = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
+        kernel = Imgproc.getStructuringElement(MORPH_RECT, new Size(2, 2));
 
-        mask = new Mat(new Size(width, height), CvType.CV_8U, new Scalar(0));
-        Core.rectangle(mask, new Point(MAXWIDTH / 2 - MAXHEIGHT / 2, 0), new Point(MAXWIDTH / 2 + MAXHEIGHT / 2, MAXHEIGHT), new Scalar(255), -1);
-
+        // 复制下面的程序
         initModel();
+
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        int trueH = dm.heightPixels;
+            maskLayout.setMinimumHeight(trueH);
+            maskLayout.setMinimumWidth(trueH);
+
+            maskLayout.setOnTouchListener((v, event) -> {
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_UP:
+                Mat centerMat = currentMat.submat(new Rect(new Point(MAXWIDTH / 2 - MAXHEIGHT / 2, 0), new Point(MAXWIDTH / 2 + MAXHEIGHT / 2, MAXHEIGHT)));
+                Imgproc.resize(centerMat, centerMat, new Size(DIM_IMG_SIZE_X, DIM_IMG_SIZE_Y));
+
+                Imgproc.dilate(centerMat, centerMat, kernel);
+
+                if (detector != null) {
+                    List<TensorFlowLiteDetector.Recognition> results = detector.detectImage(centerMat);
+
+                    Message message = new Message();
+                    Bundle bundle = new Bundle();
+                    bundle.putString("Result", String.valueOf(results));
+                    message.setData(bundle);
+                    Log.e(TAG, String.valueOf(results));
+                    displayHandler.sendMessage(message);
+                }
+                break;
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_MOVE:
+                break;
+            case MotionEvent.ACTION_DOWN:
+            case MotionEvent.ACTION_MOVE:
+                float tX = event.getX() / trueH * 640;
+                float tY = event.getY() / trueH * 480;
+                if (tX < MAXWIDTH / 2 - MAXHEIGHT / 2 || tX > MAXWIDTH / 2 + MAXHEIGHT / 2) {
+                    return true;
+                }
+                Core.line(currentMat, new Point(tX, tY), new Point(tX, tY), new Scalar(255), 12);
+                break;
+        }
+        findViewById(R.id.clearButton).setOnClickListener(v -> {
+        zeroMat.copyTo(currentMat);
+
+        Message message = new Message();
+        Bundle bundle = new Bundle();
+        bundle.putString("Result", String.valueOf(""));
+        message.setData(bundle);
+        Log.e(TAG, String.valueOf(""));
+        displayHandler.sendMessage(message);       
+        return true;
     }
 
     private void initModel() {
@@ -171,23 +222,10 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        Mat rgbaMat = inputFrame.rgba();
-        Mat rgbMat = tmpMat;
-        emptyMat.copyTo(rgbMat);
-        Imgproc.cvtColor(rgbaMat, rgbMat, Imgproc.COLOR_RGBA2RGB);
-        Mat targetMat = new Mat(rgbMat, new Rect(new Point(MAXWIDTH / 2 - MAXHEIGHT / 2, 0), new Size(MAXWIDTH / 2 + MAXHEIGHT / 2, MAXHEIGHT)));
-        Imgproc.resize(targetMat, targetMat, new Size(128, 128));
 
-        List<TensorFlowLiteDetector.Recognition> results = detector.detectImage(targetMat);
-
-        rgbaMat.copyTo(rgbMat, mask);
-
-        Message message = new Message();
-        Bundle bundle = new Bundle();
-        bundle.putString("Result", String.valueOf(results));
-        message.setData(bundle);
-        message.what = 1;
-        displayHandler.sendMessage(message);
+        currentMat.copyTo(tmpMat);
+    Core.rectangle(tmpMat, new Point(MAXWIDTH / 2 - MAXHEIGHT / 2, 0), new Point(MAXWIDTH / 2 + MAXHEIGHT / 2, MAXHEIGHT), new Scalar(255), 3);
+    return tmpMat;
 
         return rgbMat;
     }
