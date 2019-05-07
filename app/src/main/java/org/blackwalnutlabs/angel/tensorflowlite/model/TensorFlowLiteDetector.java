@@ -98,14 +98,10 @@ public class TensorFlowLiteDetector {
         bitmap.getPixels(intValues, 0, bitmap.getWidth(),
                 0, 0, bitmap.getWidth(), bitmap.getHeight());
 
-        int pixel = 0;
-        for (int i = 0; i < DIM_IMG_SIZE_X; ++i) {
-            for (int j = 0; j < DIM_IMG_SIZE_Y; ++j) {
-                final int val = intValues[pixel++];
-                imgData.putFloat((((val >> 16) & 0xFF) - IMAGE_MEAN) / IMAGE_STD);
-                imgData.putFloat((((val >> 8) & 0xFF) - IMAGE_MEAN) / IMAGE_STD);
-                imgData.putFloat((((val) & 0xFF) - IMAGE_MEAN) / IMAGE_STD);
-            }
+      
+         for (final int val : intValues) {
+        imgData.putFloat(((val & 0xFF) - IMAGE_MEAN) / IMAGE_STD);
+    }
         }
     }
 
